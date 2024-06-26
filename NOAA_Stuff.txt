@@ -1,0 +1,22 @@
+
+API to match manual query:
+https://www.ncei.noaa.gov/access/services/data/v1?dataset=local-climatological-data&stations=72311913886&startDate=2010-01-01&endDate=2019-01-01&format=csv
+
+API for daily summary global (including Mexico) - use this for international
+https://www.ncei.noaa.gov/access/services/data/v1?dataset=global-summary-of-the-day&stations=99843499999&startDate=2010-01-01&endDate=2019-01-01&format=csv
+
+API for daily summary - can not get this to work
+https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=72462023061&startDate=2010-01-01&endDate=2019-01-02&format=csv
+
+
+
+
+
+
+You can use this map interface to query the stations for the station numbers:
+https://gis.ncdc.noaa.gov/maps/ncei/cdo/hourly
+
+Hit the wrench icon beside the active layer and click on the Identify tool. From there, you can click on a dot to retrieve metadata/station number.
+
+If you prefer a text file, see
+ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.txt

@@ -3,6 +3,7 @@ Imports Excel = Microsoft.Office.Interop.Excel
 Imports Microsoft.Office
 Imports System.Runtime.InteropServices
 Imports System.Data.OleDb
+Imports System.Text.RegularExpressions
 
 
 Public Class Results
@@ -11,60 +12,82 @@ Public Class Results
     Dim dtChartData As New DataTable
 
     Private Sub Results_FormClosing(sender As Object, e As System.Windows.Forms.FormClosingEventArgs) Handles Me.FormClosing
-        ' new version
+        ' clear out data table
         dtWeatherResults.Dispose()
+    End Sub
+
+    Private Sub Results_Shown(sender As System.Object, e As System.EventArgs) Handles MyBase.SizeChanged
+        Call resizeControls()
     End Sub
 
 
     Private Sub Results_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load
-        ' new version
-        If frmConvert.list1.SelectedIndex < 0 Then Exit Sub
+        Call resizeControls()
+
+        ' loads csv data into a data table for viewing the summary data for each location in the list box
+        If frmConvert.list1.Items.Count < 1 Then Exit Sub
 
         Cursor = Cursors.WaitCursor
         If dtWeatherResults.Columns.Count > 0 Then
             dtWeatherResults = Nothing
         End If
 
-        If IsNumeric(Mid(frmConvert.list1.SelectedItem.ToString, Len(frmConvert.list1.SelectedItem.ToString) - 8, 5)) Then
-            ' USA data
-            Call NOAADataToDataTable(frmConvert.list1.SelectedItem.ToString)
-        Else
-            'international
-            Call NOAADataToDataTableInternational(frmConvert.list1.SelectedItem.ToString)
-        End If
+        ' do this for each data file (each location)
+        For Each item In frmConvert.list1.Items
+            Call NOAADataToDataTable(frmConvert.txtDataDirectory.Text & "\" & item.ToString)
+            Call processData(item.ToString)
+        Next item
 
-        Call processData()
         Cursor = Cursors.Default
 
     End Sub
 
-    Private Sub processData()
-        ' new version
-        ' processing a file and save into the dataTable
+    Private Sub resizeControls()
+        Panel1.Height = Me.Height * 0.45
+        Panel1.Width = Me.Width * 0.99
 
-        'if zipcode is at the end of the file, then it is LCD data
-        If frmConvert.list1.SelectedIndex > -1 Then
+        DataGridView1.Height = Panel1.Height
+        DataGridView1.Width = Panel1.Width
+
+        Panel2.Height = Me.Height * 0.45
+        Panel2.Width = Me.Width * 0.99
+
+        chtDailyAverages.Height = Panel2.Height
+        chtDailyAverages.Width = Panel2.Width
+
+
+
+    End Sub
+
+    Private Sub Form1_Resize(sender As Object, e As EventArgs) Handles Me.Resize
+        Call resizeControls()
+    End Sub
+
+    Private Sub processData(fileName As String)
+        ' processing a data file and save into the dataTable
+
+        If frmConvert.list1.Items.Count > 0 Then
 
             Dim strStationName As String = ""
-            Dim dblTotalTemperature As Double = 0 ' 5th field
+            Dim dblTotalTemperature As Double = 0
             Dim dtRow As DataRow
-            Dim dblTotalDewPoint As Double = 0 ' 3rd field
-            Dim dblTotalWindSpeed As Double = 0 ' 8th field
-            Dim intDaysHighLess32 As Integer = 0 ' 9th field
-            Dim intDaysHighLess50 As Integer = 0 ' 9th field
-            Dim intDaysHighMore90 As Integer = 0 ' 9th field
-            Dim intAverageSummerDP As Integer = 0 '4th field
-            Dim dblTotalSummerDP As Double = 0  '4th field
-            Dim intPerfectDay As Integer = 0 ' multiple fields
-            Dim intGreatDay As Integer = 0 ' multiple fields
+            Dim dblTotalDewPoint As Double = 0
+            Dim dblTotalWindSpeed As Double = 0
+            Dim intDaysHighLess32 As Integer = 0
+            Dim intDaysHighLess50 As Integer = 0
+            Dim intDaysHighMore90 As Integer = 0
+            Dim intAverageSummerDP As Integer = 0
+            Dim dblTotalSummerDP As Double = 0
+            Dim intPerfectDay As Integer = 0
+            Dim intGreatDay As Integer = 0
 
             Dim intTotalDaysTemperature As Integer = 0
             Dim intTotalDaysDewPoint As Integer = 0
             Dim intTotalDaysWindSpeed As Integer = 0
 
-            Dim intTotalRainDays As Integer = 0 ' 11th field
+            Dim intTotalRainDays As Integer = 0
             Dim dblTotalRain As Double = 0
-            Dim intTotalSnowDays As Integer = 0 ' 13th field
+            Dim intTotalSnowDays As Integer = 0
             Dim dblTotalSnow As Double = 0
             Dim dblHousePrice As Double = 0
 
@@ -72,28 +95,27 @@ Public Class Results
 
 
             If dtWeatherResults.Columns.Count < 1 Then
-                ' if the table already has been built
+                ' if the table has not already has been built
                 Call buildDataTable()
             End If
 
-            'Call openData() ' loads any saved data into the DT first
 
 
 
             For y = 0 To dtNOAAResults.Rows.Count - 1
-                ' average temperature
+                ' daily average dry bulb temperature
                 If IsNumeric(dtNOAAResults.Rows(y).Item(4).ToString) = True Then
                     dblTotalTemperature = dblTotalTemperature + CInt(dtNOAAResults.Rows(y).Item(4).ToString)
                     intTotalDaysTemperature = intTotalDaysTemperature + 1
                 End If
 
                 If IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) = True Then
-                    ' average dew point temp
+                    ' daily average dew point temp
                     dblTotalDewPoint = dblTotalDewPoint + CInt(dtNOAAResults.Rows(y).Item(3).ToString)
                     intTotalDaysDewPoint = intTotalDaysDewPoint + 1
 
                     'USA DATA
-                    If IsNumeric(Mid(frmConvert.list1.SelectedItem.ToString, Len(frmConvert.list1.SelectedItem.ToString) - 8, 5)) Then
+                    If Mid(fileName, 1, 1) <> "_" Then  'USA Data
                         If CInt(Mid((dtNOAAResults.Rows(y).Item(1).ToString), 6, 2)) >= 6 And CInt(Mid((dtNOAAResults.Rows(y).Item(1).ToString), 6, 2)) <= 8 Then
                             ' summer months
                             dblTotalSummerDP = dblTotalSummerDP + CInt(dtNOAAResults.Rows(y).Item(3).ToString)
@@ -109,68 +131,71 @@ Public Class Results
                     End If
                 End If
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(7).ToString) = True Then
-                        ' average wind speed
-                        dblTotalWindSpeed = dblTotalWindSpeed + CInt(dtNOAAResults.Rows(y).Item(7).ToString)
-                        intTotalDaysWindSpeed = intTotalDaysWindSpeed + 1
-                    End If
+                If IsNumeric(dtNOAAResults.Rows(y).Item(9).ToString) = True Then
+                    ' daily average wind speed
+                    dblTotalWindSpeed = dblTotalWindSpeed + CInt(dtNOAAResults.Rows(y).Item(9).ToString)
+                    intTotalDaysWindSpeed = intTotalDaysWindSpeed + 1
+                End If
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(8).ToString) = True Then
-                        ' max temperature
-                        If CInt(dtNOAAResults.Rows(y).Item(8).ToString) <= 60 Then
-                            intDaysHighLess50 = intDaysHighLess50 + 1
-                            If CInt(dtNOAAResults.Rows(y).Item(8).ToString) < 32 Then
-                                intDaysHighLess32 = intDaysHighLess32 + 1
-                            End If
-                        ElseIf CInt(dtNOAAResults.Rows(y).Item(8).ToString) >= 90 Then
-                            intDaysHighMore90 = intDaysHighMore90 + 1
+                If IsNumeric(dtNOAAResults.Rows(y).Item(13).ToString) = True Then
+                    ' max temperature for the day
+                    If CInt(dtNOAAResults.Rows(y).Item(13).ToString) <= 50 Then
+                        intDaysHighLess50 = intDaysHighLess50 + 1
+                        If CInt(dtNOAAResults.Rows(y).Item(13).ToString) <= 32 Then
+                            intDaysHighLess32 = intDaysHighLess32 + 1
                         End If
+                    ElseIf CInt(dtNOAAResults.Rows(y).Item(13).ToString) >= 90 Then
+                        intDaysHighMore90 = intDaysHighMore90 + 1
                     End If
+                End If
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(8).ToString) = True And IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) = True Then
-                        ' max temperature and dew point temperature
-                        If CInt(dtNOAAResults.Rows(y).Item(8).ToString) <= frmConvert.txtHighLessThan.Text And CInt(dtNOAAResults.Rows(y).Item(8).ToString) >= frmConvert.txtHighGreaterThan.Text And dtNOAAResults.Rows(y).Item(3).ToString <= frmConvert.txtDPLessThan.Text Then
-                            intPerfectDay = intPerfectDay + 1
-                        ElseIf IsNumeric(dtNOAAResults.Rows(y).Item(8).ToString) = True And IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) = True Then
-                            If CInt(dtNOAAResults.Rows(y).Item(8).ToString) <= frmConvert.txtGoodHighLessThan.Text And CInt(dtNOAAResults.Rows(y).Item(8).ToString) >= frmConvert.txtGoodHighGreaterThan.Text And dtNOAAResults.Rows(y).Item(3).ToString <= frmConvert.txtGoodDPLessThan.Text Then
-                                intGreatDay = intGreatDay + 1
-                            End If
-                        End If
+                ' if there is a number in dailyAverageDP and dailyMaxDryBulbTemp
+                If IsNumeric(dtNOAAResults.Rows(y).Item(13).ToString) = True And IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) = True Then
+                    ' max temperature and dew point temperature fit the perfect day requirement
+                    If CInt(dtNOAAResults.Rows(y).Item(13).ToString) <= frmConvert.txtHighLessThan.Text And CInt(dtNOAAResults.Rows(y).Item(13).ToString) >= frmConvert.txtHighGreaterThan.Text And dtNOAAResults.Rows(y).Item(3).ToString <= frmConvert.txtDPLessThan.Text Then
+                        intPerfectDay = intPerfectDay + 1
+                        ' 2024 ElseIf IsNumeric(dtNOAAResults.Rows(y).Item(8).ToString) = True And IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) = True Then
+
+                        ' max temp and DP fit great day requirement
+                    ElseIf CInt(dtNOAAResults.Rows(y).Item(13).ToString) <= frmConvert.txtGoodHighLessThan.Text And CInt(dtNOAAResults.Rows(y).Item(13).ToString) >= frmConvert.txtGoodHighGreaterThan.Text And dtNOAAResults.Rows(y).Item(3).ToString <= frmConvert.txtGoodDPLessThan.Text Then
+                        intGreatDay = intGreatDay + 1
+                        ' 2024 End If
                     End If
+                End If
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(10).ToString) = True Then
-                        ' if value for rain
-                        dblTotalRain = dblTotalRain + CDbl(dtNOAAResults.Rows(y).Item(10).ToString)
-                        If CDbl(dtNOAAResults.Rows(y).Item(10).ToString) > 0 Then
-                            intTotalRainDays = intTotalRainDays + 1
-                        End If
+                If IsNumeric(dtNOAAResults.Rows(y).Item(17).ToString) = True Then
+                    ' if value for rain
+                    dblTotalRain = dblTotalRain + CDbl(dtNOAAResults.Rows(y).Item(17).ToString)
+                    If CDbl(dtNOAAResults.Rows(y).Item(17).ToString) > 0 Then
+                        intTotalRainDays = intTotalRainDays + 1
                     End If
+                End If
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(12).ToString) = True Then
-                        ' if value for snow
-                        dblTotalSnow = dblTotalSnow + CDbl(dtNOAAResults.Rows(y).Item(12).ToString)
-                        If CDbl(dtNOAAResults.Rows(y).Item(12).ToString) > 0 Then
-                            intTotalSnowDays = intTotalSnowDays + 1
-                        End If
+                If IsNumeric(dtNOAAResults.Rows(y).Item(19).ToString) = True Then
+                    ' if value for snow
+                    dblTotalSnow = dblTotalSnow + CDbl(dtNOAAResults.Rows(y).Item(19).ToString)
+                    If CDbl(dtNOAAResults.Rows(y).Item(19).ToString) > 0 Then
+                        intTotalSnowDays = intTotalSnowDays + 1
                     End If
+                End If
 
-                    If dtNOAAResults.Columns.Count = 16 Then
-                        If IsNumeric(dtNOAAResults.Rows(y).Item(15).ToString) = True Then
-                            ' median house price
-                            dblHousePrice = dtNOAAResults.Rows(y).Item(15).ToString
-                        End If
+                If dtNOAAResults.Columns.Count = 26 Then
+                    If IsNumeric(dtNOAAResults.Rows(y).Item(25).ToString) = True Then
+                        ' median house price
+                        dblHousePrice = dtNOAAResults.Rows(y).Item(25).ToString
                     End If
+                End If
 
 
-                    If IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) And IsNumeric(dtNOAAResults.Rows(y).Item(4).ToString) And IsNumeric(dtNOAAResults.Rows(y).Item(8).ToString) Then
-                        intTotalDaysWithValues = intTotalDaysWithValues + 1
-                    End If
+                If IsNumeric(dtNOAAResults.Rows(y).Item(3).ToString) And IsNumeric(dtNOAAResults.Rows(y).Item(13).ToString) And IsNumeric(dtNOAAResults.Rows(y).Item(4).ToString) Then
+                    intTotalDaysWithValues = intTotalDaysWithValues + 1
+                End If
 
             Next
 
             dtRow = dtWeatherResults.NewRow()
 
-            dtRow.Item("Name") = frmConvert.list1.SelectedItem.ToString
+            dtRow.Item("Name") = fileName.ToString
             dtRow.Item("TotalDays") = dtNOAAResults.Rows.Count
             dtRow.Item("DaysCalculated") = intTotalDaysWithValues
 
@@ -240,12 +265,14 @@ Public Class Results
             DataGridView1.Columns(14).DefaultCellStyle.Format = "###,###"
             DataGridView1.Columns(17).DefaultCellStyle.Format = "###,###"
 
+            dtNOAAResults.Clear()
+
         End If
     End Sub
 
 
     Private Sub buildDataTable()
-        ' new version
+        ' builds a data table to store the data in
         dtWeatherResults.Columns.Add("Name", GetType(String))
         dtWeatherResults.Columns.Add("TotalDays", GetType(Integer))
         dtWeatherResults.Columns.Add("DaysCalculated", GetType(Integer))
@@ -267,7 +294,7 @@ Public Class Results
     End Sub
 
     Private Sub btnOpen_Click(sender As System.Object, e As System.EventArgs) Handles btnOpen.Click
-        ' new version
+
         If dtWeatherResults.Columns.Count <> 13 Then
             dtWeatherResults.Clear()
             Call buildDataTable()
@@ -279,6 +306,8 @@ Public Class Results
     End Sub
 
     Private Sub formatGrid()
+        ' formats the data grid
+
         With DataGridView1.Columns("TotalDays")
             .ValueType = Type.GetType("System.Decimal")
             .DefaultCellStyle.Format = "###,###,###"
@@ -331,10 +360,10 @@ Public Class Results
     End Sub
 
     Private Sub openData()
-        ' new version
+
 
         Dim folder = frmConvert.folder1.SelectedPath
-        Dim CnStr = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & folder & ";Extended Properties=""text;HDR=No;FMT=Delimited"";"
+        Dim CnStr = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & frmConvert.txtDataDirectory.Text & ";Extended Properties=""text;HDR=No;FMT=Delimited"";"
         Dim dt1 As New DataTable
 
         Using Adp As New OleDbDataAdapter("select * from [Weather.csv]", CnStr)
@@ -353,26 +382,26 @@ Public Class Results
 
 
         DataGridView1.DataSource = dtWeatherResults
-        'DataGridView1.DefaultCellStyle.Format = "###,###"
         dt1.Dispose()
     End Sub
 
     Private Sub g_Click(sender As System.Object, e As System.EventArgs) Handles btnSave.Click
-        ' new version
+
         ' Save the input DataTable to a CSV file. By default the values are Tab 
         ' delimited, but you can use the second overload version to use any other 
         ' string you want.
-        '
-        ' Example:
+
         Dim ds As New DataSet
         '    SqlDataAdapter1.Fill(ds, "Users")
-        DataTable2CSV2(dtWeatherResults, frmConvert.folder1.SelectedPath & " \Weather.csv", ",")
+        DataTable2CSV2(dtWeatherResults, frmConvert.txtDataDirectory.Text & " \Weather.csv", ",")
 
         dtWeatherResults.Dispose()
         Me.Close()
     End Sub
 
     Private Sub DataTable2CSV(ByVal table As DataTable, ByVal filename As String, ByVal sepChar As String)
+
+        ' takes the edited data table, and saves is back to a CSV file
         Dim writer As System.IO.StreamWriter
 
         Try
@@ -400,6 +429,8 @@ Public Class Results
     End Sub
 
     Private Sub DataTable2CSV2(ByVal table As DataTable, ByVal filename As String, ByVal sepChar As String)
+        ' takes the edited data table, and saves is back to a CSV file
+
         Dim path As String = filename
         Dim builder As New System.Text.StringBuilder
         Dim sep As String = ""
@@ -455,8 +486,11 @@ Public Class Results
 
 
     Private Sub DataGridView1_RowHeaderMouseClick(sender As Object, e As System.Windows.Forms.DataGridViewCellMouseEventArgs) Handles DataGridView1.RowHeaderMouseClick
-        ' get daily data and chart (high, low, dewpoint)
-        Dim fileName = frmConvert.folder1.SelectedPath & "\" & DataGridView1.SelectedRows(0).Cells(0).Value
+        ' get daily data and chart (high, low, dewpoint) 
+
+        Dim fileName = frmConvert.txtDataDirectory.Text & "\" & DataGridView1.SelectedRows(0).Cells(0).Value
+
+        ' call to get chart data
         Call getChartData(fileName)
 
         chtDailyAverages.Series.Clear()
@@ -490,33 +524,28 @@ Public Class Results
     End Sub
 
     Public Sub getChartData(ByVal filename As String)
-        ' new version
-        Dim folder = frmConvert.folder1.SelectedPath
-        Dim CnStr = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & folder & ";Extended Properties=""text;HDR=No;FMT=Delimited"";"
+        'only query out dewpoint, high and low from the CSV file and save it to a data table
+
+        Dim matchFound As Match
+        matchFound = Regex.Match(filename, "(.*)\\(.*\..*)[\\]?", RegexOptions.IgnoreCase)
+
+        Dim CnStr = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & matchFound.Groups(1).Value & ";Extended Properties=""text;HDR=No;FMT=Delimited"";"
+
+
         Dim dt1 As New DataTable
 
         dtChartData.Clear()
 
-        'only query out dewpoint, high and low
-        If IsNumeric(Mid(DataGridView1.SelectedRows(0).Cells(0).Value, Len(DataGridView1.SelectedRows(0).Cells(0).Value) - 8, 5)) Then
-            ' LCD USA data
-            'Using Adp As New OleDbDataAdapter("select F4, F9, F10 from " & DataGridView1.SelectedRows(0).Cells(0).Value & " where (f4 is not null and f9 is not null and f10 is not null)", CnStr)
-            Using Adp As New OleDbDataAdapter("select F4 as 'DP', F9 as 'MIN', F10 as 'MAX' from " & DataGridView1.SelectedRows(0).Cells(0).Value & " where (F4 is not null and F9 is not null and F10 is not null)", CnStr)
-                Adp.Fill(dtChartData)
-            End Using
-        Else
-            'International data
-            'Using Adp As New OleDbDataAdapter("select F3, F6, F7 as from " & DataGridView1.SelectedRows(0).Cells(0).Value & " where (f3 is not null and f6 is not null and f7 is not null)", CnStr)
-            Using Adp As New OleDbDataAdapter("select F3 as 'DP', F6 as 'MIN', F7 as 'MAX' from " & DataGridView1.SelectedRows(0).Cells(0).Value & " where (F3 is not null and F6 is not null and F7 is not null)", CnStr)
-                Adp.Fill(dtChartData)
-            End Using
-        End If
+        'only query out dewpoint, high and low 
+
+        Using Adp As New OleDbDataAdapter("select F4 as 'DP', F14 as 'MAX', F15 as 'MIN' from [" & matchFound.Groups(2).Value & "] where (F4 is not null and F15 is not null and F14 is not null)", CnStr)
+            Adp.Fill(dtChartData)
+        End Using
 
         ' remove header row
         dtChartData.Rows.RemoveAt(0)
 
     End Sub
-
 
 
 End Class
